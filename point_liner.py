@@ -426,7 +426,7 @@ b105=np.array([0.48125,0.5175,0.1])
 #边框数据测试
 
 
-t_total = simend
+t_total = 177
 
 ######################################
 ## USER CODE ENDS HERE
@@ -743,6 +743,7 @@ while not glfw.window_should_close(window):
             X_ref = QuadBezierInterpolate(b101, b102, b103, data.time - 125*t_total/n, t_total/n)
         elif (data.time <126* t_total/n):
             X_ref = QuadBezierInterpolate(b103, b104, b105, data.time - 126*t_total/n, t_total/n)
+        
         
         
         
