@@ -5,7 +5,7 @@
 # Date: Dec., 2025
 ###
 
-
+import matplotlib.pyplot as plt  
 import mujoco as mj
 from mujoco.glfw import glfw
 import numpy as np
@@ -211,7 +211,7 @@ def QuadBezierInterpolate(q0, q1, q2, t, t_total):
 q0=np.array([0.25375,0.13375,0.1])
 q1=np.array([0.305,0.13375,0.1])
 q2=np.array([0.305,0.165,0.1])
-q3=np.array([0.279375,0.17125,0.11])
+q3=np.array([0.279375,0.17125,0.20])
 q4=np.array([0.25375,0.1775,0.1])
 q5=np.array([0.305,0.1775,0.1])
 q6=np.array([0.279375,0.1875,0.11])
@@ -320,7 +320,7 @@ b4=np.array([0.44875,0.16625,0.1])
 b5=np.array([0.4575,0.15875,0.1])
 b6=np.array([0.49124999999999996,0.12875,0.1])
 b7=np.array([0.49124999999999996,0.16375,0.1])
-b8=np.array([0.48062499999999997,0.16875,0.1])
+b8=np.array([0.48062499999999997,0.16875,0.12])
 b9=np.array([0.47,0.17375000000000002,0.1])
 b10=np.array([0.445,0.17375000000000002,0.1])
 b11=np.array([0.445,0.18875,0.1])
@@ -330,7 +330,7 @@ b14=np.array([0.4925,0.2025,0.1])
 b15=np.array([0.4925,0.18875,0.1])
 b16=np.array([0.4925,0.17375000000000002,0.1])
 b17=np.array([0.47,0.17375000000000002,0.1])
-b18=np.array([0.46375,0.195625,0.1])
+b18=np.array([0.46375,0.195625,0.12])
 b19=np.array([0.4575,0.2175,0.1])
 b20=np.array([0.4425,0.2175,0.1])
 b21=np.array([0.4425,0.23125,0.1])
@@ -338,7 +338,7 @@ b22=np.array([0.44875,0.25125,0.1])
 b23=np.array([0.4575,0.24375,0.1])
 b24=np.array([0.49124999999999996,0.21375,0.1])
 b25=np.array([0.49124999999999996,0.24875,0.1])
-b26=np.array([0.468125,0.2675,0.1])
+b26=np.array([0.468125,0.2675,0.12])
 b27=np.array([0.445,0.28625,0.1])
 b28=np.array([0.445,0.26625,0.1])
 b29=np.array([0.46875,0.26,0.1])
@@ -350,7 +350,7 @@ b34=np.array([0.4925,0.2875,0.1])
 b35=np.array([0.4925,0.27249999999999996,0.1])
 b36=np.array([0.4925,0.26,0.1])
 b37=np.array([0.48125,0.26,0.1])
-b38=np.array([0.463125,0.295625,0.1])
+b38=np.array([0.463125,0.295625,0.12])
 b39=np.array([0.445,0.33125000000000004,0.1])
 b40=np.array([0.445,0.31125,0.1])
 b41=np.array([0.46875,0.305,0.1])
@@ -362,7 +362,7 @@ b46=np.array([0.4925,0.3325,0.1])
 b47=np.array([0.4925,0.3175,0.1])
 b48=np.array([0.4925,0.305,0.1])
 b49=np.array([0.48125,0.305,0.1])
-b50=np.array([0.468125,0.325625,0.1])
+b50=np.array([0.468125,0.325625,0.12])
 b51=np.array([0.45499999999999996,0.34625,0.1])
 b52=np.array([0.4425,0.34625,0.1])
 b53=np.array([0.4425,0.35875,0.1])
@@ -376,7 +376,7 @@ b60=np.array([0.49375,0.375,0.1])
 b61=np.array([0.49375,0.36,0.1])
 b62=np.array([0.49375,0.345,0.1])
 b63=np.array([0.48125,0.345,0.1])
-b64=np.array([0.468125,0.36812500000000004,0.1])
+b64=np.array([0.468125,0.36812500000000004,0.12])
 b65=np.array([0.45499999999999996,0.39125,0.1])
 b66=np.array([0.4425,0.39125,0.1])
 b67=np.array([0.4425,0.40375000000000005,0.1])
@@ -390,11 +390,11 @@ b74=np.array([0.49375,0.42000000000000004,0.1])
 b75=np.array([0.49375,0.405,0.1])
 b76=np.array([0.49375,0.39,0.1])
 b77=np.array([0.48125,0.39,0.1])
-b78=np.array([0.47,0.41125,0.1])
+b78=np.array([0.47,0.41125,0.12])
 b79=np.array([0.45875,0.4325,0.1])
 b80=np.array([0.445,0.44999999999999996,0.1])
 b81=np.array([0.4925,0.44999999999999996,0.1])
-b82=np.array([0.46875,0.47562499999999996,0.1])
+b82=np.array([0.46875,0.47562499999999996,0.12])
 b83=np.array([0.445,0.50125,0.1])
 b84=np.array([0.445,0.48124999999999996,0.1])
 b85=np.array([0.46875,0.475,0.1])
@@ -406,7 +406,7 @@ b90=np.array([0.4925,0.5025000000000001,0.1])
 b91=np.array([0.4925,0.48750000000000004,0.1])
 b92=np.array([0.4925,0.475,0.1])
 b93=np.array([0.48125,0.475,0.1])
-b94=np.array([0.463125,0.515625,0.1])
+b94=np.array([0.463125,0.515625,0.12])
 b95=np.array([0.445,0.54375,0.1])
 b96=np.array([0.445,0.52375,0.1])
 b97=np.array([0.46875,0.5175,0.1])
@@ -426,19 +426,25 @@ b105=np.array([0.48125,0.5175,0.1])
 #边框数据测试
 
 
-t_total = 177
+t_total = 30
 
 ######################################
 ## USER CODE ENDS HERE
 ######################################
 n=127
+iswriting = True
+liu_start_time = 32 * t_total / n
+liu_end_time = 46 * t_total / n 
+
+liu_joint_data = [] # 用于存储关节角度
+liu_time_data = []  # 用于存储时间戳
 while not glfw.window_should_close(window):
     time_prev = data.time
 
     while (data.time - time_prev < 1.0/60.0):
         # Store trajectory
         mj_end_eff_pos = data.site_xpos[0]
-        if (mj_end_eff_pos[2] < 0.1):
+        if (iswriting == True):
             traj_points.append(mj_end_eff_pos.copy())
         if len(traj_points) > MAX_TRAJ:
             traj_points.pop(0)
@@ -460,19 +466,23 @@ while not glfw.window_should_close(window):
             X_ref = LinearInterpolate(q1, q2, data.time - 1.3*t_total/n, 0.7*t_total/n)
         elif (data.time <2.3* t_total/n):
             X_ref = LinearInterpolate(q2, q2, data.time - 2*t_total/n, 0.3*t_total/n)
-        elif (data.time <2.5* t_total/n):
+            iswriting = False
+        elif (2.3* t_total/n < data.time <2.5* t_total/n):
             X_ref = QuadBezierInterpolate(q2, q3, q4, data.time - 2.3*t_total/n, 0.2*t_total/n)
-        
+
         #i
-        elif (data.time <3* t_total/n):
+        elif (2.5* t_total/n<data.time <3* t_total/n):
             X_ref = LinearInterpolate(q4, q4, data.time - 2.5*t_total/n, 0.5*t_total/n)
         elif (data.time <3.8* t_total/n):
+            iswriting = True
             X_ref = LinearInterpolate(q4, q5, data.time - 3*t_total/n, 0.8*t_total/n)
+            
         elif (data.time <4.2* t_total/n):
             X_ref = LinearInterpolate(q5, q5, data.time - 3.8*t_total/n, 0.4*t_total/n)
         elif (data.time <5* t_total/n):
+
             X_ref = QuadBezierInterpolate(q5, q6, q7, data.time - 4*t_total/n, t_total/n)
-        
+          
         
         elif (data.time <6* t_total/n):
             X_ref = LinearInterpolate(q7, q8, data.time - 5*t_total/n, t_total/n)
@@ -535,7 +545,7 @@ while not glfw.window_should_close(window):
 
 
 
-
+#刘
         elif (data.time <33* t_total/n):
             X_ref = QuadBezierInterpolate(q47, q48, a1, data.time - 32*t_total/n, t_total/n)
         elif (data.time <34* t_total/n):
@@ -609,14 +619,14 @@ while not glfw.window_should_close(window):
         elif (data.time <67* t_total/n):
             X_ref = LinearInterpolate(a50, a51, data.time - 66*t_total/n, t_total/n)
         elif (data.time <68* t_total/n):
-            X_ref = QuadBezierInterpolate(a51, a52, b1, data.time - 67*t_total/n, t_total/n)
+            X_ref = QuadBezierInterpolate(a51, a52, b1, data.time - 67*t_total/n, t_total/n-0.05)
 
     #2    
         
-        elif (data.time <69* t_total/n):
-            X_ref = QuadBezierInterpolate(b1, b2, b3, data.time - 68*t_total/n, t_total/n)
-        elif (data.time <70* t_total/n):
-            X_ref = QuadBezierInterpolate(b3, b4, b5, data.time - 69*t_total/n, t_total/n)
+        elif (data.time <68* t_total/n-0.05):
+            X_ref = QuadBezierInterpolate(b1, b2, b3, data.time - 68*t_total/n, t_total/n+0.1)
+        elif (data.time <70* t_total/n+0.05):
+            X_ref = QuadBezierInterpolate(b3, b4, b5, data.time - 69*t_total/n, t_total/n-0.05)
         elif (data.time <71* t_total/n):
             X_ref = LinearInterpolate(b5, b6, data.time -70* t_total/n, t_total/n)
         elif (data.time <72* t_total/n):
@@ -626,12 +636,12 @@ while not glfw.window_should_close(window):
        #0 
         elif (data.time <74* t_total/n):
             X_ref = QuadBezierInterpolate(b9, b10, b11, data.time - 73*t_total/n, t_total/n)
-        elif (data.time <75* t_total/n):
-            X_ref = QuadBezierInterpolate(b11, b12, b13, data.time - 74*t_total/n, t_total/n)
-        elif (data.time <76* t_total/n):
-            X_ref = QuadBezierInterpolate(b13, b14, b15, data.time - 75*t_total/n, t_total/n)
+        elif (data.time <75* t_total/n-0.05):
+            X_ref = QuadBezierInterpolate(b11, b12, b13, data.time - 74*t_total/n, t_total/n-0.05)
+        elif (data.time <76* t_total/n-0.10):
+            X_ref = QuadBezierInterpolate(b13, b14, b15, data.time - 75*(t_total/n-0.05), t_total/n-0.05)
         elif (data.time <77* t_total/n):
-            X_ref = QuadBezierInterpolate(b15, b16, b17, data.time - 76*t_total/n, t_total/n)
+            X_ref = QuadBezierInterpolate(b15, b16, b17, data.time - 76*(t_total/n-0.10), t_total/n+0.10)
         elif (data.time <78* t_total/n):
             X_ref = QuadBezierInterpolate(b17, b18, b19, data.time - 77*t_total/n, t_total/n)
         #2
@@ -708,14 +718,14 @@ while not glfw.window_should_close(window):
         elif (data.time <111* t_total/n):
             X_ref = QuadBezierInterpolate(b77, b78, b79, data.time - 110*t_total/n, t_total/n)
 
-
+#1
         elif (data.time <112* t_total/n):
             X_ref = LinearInterpolate(b79, b80, data.time -111* t_total/n, t_total/n)
         elif (data.time <113* t_total/n):
             X_ref = LinearInterpolate(b80, b81, data.time - 112*t_total/n, t_total/n)
         elif (data.time <114* t_total/n):
             X_ref = QuadBezierInterpolate(b81, b82, b83, data.time - 113*t_total/n, t_total/n) 
-
+#5
         elif (data.time <115* t_total/n):
             X_ref = LinearInterpolate(b83, b84, data.time - 114*t_total/n, t_total/n)
         elif (data.time <2* t_total/n):
@@ -730,7 +740,7 @@ while not glfw.window_should_close(window):
             X_ref = QuadBezierInterpolate(b91, b92, b93, data.time - 119*t_total/n, t_total/n)
         elif (data.time <120* t_total/n):
             X_ref = QuadBezierInterpolate(b93, b94, b95, data.time - 120*t_total/n, t_total/n)
-
+#5
         elif (data.time <121* t_total/n):
             X_ref = LinearInterpolate(b95, b96, data.time - 121*t_total/n, t_total/n)
         elif (data.time <122* t_total/n):
@@ -811,6 +821,9 @@ while not glfw.window_should_close(window):
 
     if (data.time>=simend):
         break
+    if liu_start_time <= data.time <= liu_end_time:
+        liu_joint_data.append(data.qpos.copy()) 
+        liu_time_data.append(data.time)
 
     # get framebuffer viewport
     viewport_width, viewport_height = glfw.get_framebuffer_size(
@@ -855,7 +868,22 @@ while not glfw.window_should_close(window):
 
     # process pending GUI events, call GLFW callbacks
     glfw.poll_events()
+if len(liu_time_data) > 0:
+    print(f"正在生成关节状态图 (记录点数: {len(liu_time_data)})...")
+    plt.figure(figsize=(12, 8))
+    joint_data_np = np.array(liu_joint_data)
 
+    # 绘制 6 个关节的曲线
+    joint_names = ['Shoulder Pan', 'Shoulder Lift', 'Elbow', 'Wrist 1', 'Wrist 2', 'Wrist 3']
+    for i in range(6):
+        plt.plot(liu_time_data, joint_data_np[:, i], label=f'Joint {i+1}: {joint_names[i]}')
+
+    plt.title('Joint States during writing "Liu" (#刘 Segment)')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Joint Angle (rad)')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 glfw.terminate()
 print(cam.azimuth,cam.elevation,cam.distance,cam.lookat)
 print(data.qpos)
