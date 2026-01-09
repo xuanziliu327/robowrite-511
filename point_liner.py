@@ -5,13 +5,13 @@
 # Date: Dec., 2025
 ###
 
-import matplotlib.pyplot as plt  
+import matplotlib.pyplot as plt
 import mujoco as mj
 from mujoco.glfw import glfw
 import numpy as np
 import os
 
-xml_path = '../../models/universal_robots_ur5e/scene.xml' #xml file (assumes this is in the same folder as this file)
+xml_path = './models/universal_robots_ur5e/scene.xml' #xml file (assumes this is in the same folder as this file)
 #################################
 ## USER CODE: Set simulation parameters here
 #################################
@@ -29,23 +29,57 @@ lasty = 0
 
 # Helper function
 def IK_controller(model, data, X_ref, q_pos):
-    # Compute Jacobian
-    position_Q = data.site_xpos[0]
+    """
+    Stable IK controller with:
+    - z-direction protection
+    - end-effector orientation stabilization
+    - posture regularization (anti-collapse)
+    """
 
+    # ================== 1. End-effector position ==================
+    X = data.site_xpos[0].copy()   # (3,)
+
+    # ================== 2. Jacobians ==================
     jacp = np.zeros((3, 6))
-    mj.mj_jac(model, data, jacp, None, position_Q, 7)
+    jacr = np.zeros((3, 6))
 
-    J = jacp.copy()
-    Jinv = np.linalg.pinv(J)
+    mj.mj_jac(model, data, jacp, jacr, X, 7)
 
-    # Reference point
-    X = position_Q.copy()
-    dX = X_ref - X
+    # Full 6x6 Jacobian
+    J = np.vstack([jacp, jacr])
 
-    # Compute control input
+    # ================== 3. Position error (z weighted) ==================
+    dX_pos = X_ref - X
+    W = np.diag([1.0, 1.0, 5.0])   # ⭐ protect z
+    dX_pos = W @ dX_pos
+
+    # ================== 4. Orientation stabilization ==================
+    # Tool z-axis should point downward (world -Z)
+    R = data.site_xmat[0].reshape(3, 3)
+    z_tool = R[:, 2]
+    z_des = np.array([0.0, 0.0, -1.0])
+
+    dX_ori = np.cross(z_tool, z_des)
+
+    # ================== 5. Combine task-space error ==================
+    dX = np.hstack([dX_pos, dX_ori])   # (6,)
+
+    # ================== 6. Damped pseudo-inverse ==================
+    lambda2 = 1e-4
+    JJT = J @ J.T
+    Jinv = J.T @ np.linalg.inv(JJT + lambda2 * np.eye(6))
+
     dq = Jinv @ dX
 
+    # ================== 7. Posture regularization (anti-collapse) ==================
+    q_nominal = np.zeros(6)  # or your home posture
+    dq += -0.2 * (q_pos - q_nominal)
+
+    # ================== 8. Joint velocity limit ==================
+    dq = np.clip(dq, -1.0, 1.0)
+
     return q_pos + dq
+
 
 def init_controller(model,data):
     #initialize the controller here. This function is called once, in the beginning
@@ -178,7 +212,7 @@ data.qpos[:] = init_qpos
 cur_q_pos = init_qpos.copy()
 
 traj_points = []
-MAX_TRAJ = 1000  # Maximum number of trajectory points to store
+MAX_TRAJ = 5e5  # Maximum number of trajectory points to store
 LINE_RGBA = np.array([1.0, 0.0, 0.0, 1.0])
 
 ######################################
@@ -211,10 +245,10 @@ def QuadBezierInterpolate(q0, q1, q2, t, t_total):
 q0=np.array([0.25375,0.13375,0.1])
 q1=np.array([0.305,0.13375,0.1])
 q2=np.array([0.305,0.165,0.1])
-q3=np.array([0.279375,0.17125,0.20])
+q3=np.array([0.279375,0.17125,0.112])
 q4=np.array([0.25375,0.1775,0.1])
 q5=np.array([0.305,0.1775,0.1])
-q6=np.array([0.279375,0.1875,0.11])
+q6=np.array([0.279375,0.1875,0.112])
 q7=np.array([0.25375,0.1975,0.1])
 q8=np.array([0.29375,0.1975,0.1])
 q9=np.array([0.305,0.1975,0.1])
@@ -222,15 +256,19 @@ q10=np.array([0.305,0.21625,0.1])
 q11=np.array([0.305,0.23500000000000001,0.1])
 q12=np.array([0.29375,0.23500000000000001,0.1])
 q13=np.array([0.25375,0.23500000000000001,0.1])
-q14=np.array([0.25375,0.2425,0.11])
+q14=np.array([0.25375,0.2425,0.112])
+#uz
 q15=np.array([0.25375,0.25,0.1])
 q16=np.array([0.25375,0.2875,0.1])
 q17=np.array([0.305,0.25,0.1])
 q18=np.array([0.305,0.2875,0.1])
+#i
 q19=np.array([0.279375,0.294375,0.11])
+
 q20=np.array([0.25375,0.30125,0.1])
 q21=np.array([0.305,0.30125,0.1])
 q22=np.array([0.279375,0.31125,0.11])
+#x
 q23=np.array([0.25375,0.32125000000000004,0.1])
 q24=np.array([0.305,0.35875,0.1])
 q25=np.array([0.279375,0.35750000000000004,0.11])
@@ -245,74 +283,75 @@ q32=np.array([0.305,0.39125,0.1])
 q33=np.array([0.305,0.41000000000000003,0.1])
 q34=np.array([0.29375,0.41000000000000003,0.1])
 q35=np.array([0.25375,0.41000000000000003,0.1])
-q36=np.array([0.279375,0.416875,0.11])
+q36=np.array([0.279375,0.416875,0.115])
 
 q37=np.array([0.305,0.42374999999999996,0.1])
 q38=np.array([0.25375,0.44375,0.1])
 q39=np.array([0.305,0.46625000000000005,0.1])
-q40=np.array([0.296875,0.44937499999999997,0.11])
+q40=np.array([0.296875,0.44937499999999997,0.115])
 q41=np.array([0.28875,0.4325,0.1])
 q42=np.array([0.28875,0.4575,0.1])
-q43=np.array([0.296875,0.46875,0.11])
-
+q43=np.array([0.296875,0.46875,0.115])
+#n
 q44=np.array([0.305,0.48,0.1])
 q45=np.array([0.25375,0.48,0.1])
 q46=np.array([0.305,0.515,0.1])
 q47=np.array([0.25375,0.515,0.1])
-q48=np.array([0.29875,0.36812500000000004,0.15])
+
+q48=np.array([0.29875,0.36812500000000004,0.115])
 
 a1=np.array([0.34125,0.22125,0.1])
 a2=np.array([0.3525,0.2275,0.1])
-a3=np.array([0.354375,0.2175,0.1])
+a3=np.array([0.354375,0.2175,0.12])
 a4=np.array([0.35625,0.20750000000000002,0.1])
 a5=np.array([0.35625,0.245,0.1])
-a6=np.array([0.35625,0.240625,0.1])
+a6=np.array([0.35625,0.240625,0.12])
 a7=np.array([0.35625,0.23625000000000002,0.1])
 a8=np.array([0.385,0.23375,0.1])
 a9=np.array([0.40375,0.20500000000000002,0.1])
-a10=np.array([0.38625,0.209375,0.1])
+a10=np.array([0.38625,0.209375,0.12])
 a11=np.array([0.36875,0.21375,0.1])
 a12=np.array([0.38375000000000004,0.23750000000000002,0.1])
 a13=np.array([0.39625,0.24125,0.1])
-a14=np.array([0.373125,0.248125,0.1])
+a14=np.array([0.373125,0.248125,0.12])
 a15=np.array([0.35,0.255,0.1])
 a16=np.array([0.39125,0.255,0.1])
-a17=np.array([0.36625,0.26187499999999997,0.1])
+a17=np.array([0.36625,0.26187499999999997,0.12])
 a18=np.array([0.34125,0.26875000000000004,0.1])
 a19=np.array([0.4075,0.26875000000000004,0.1])
 a20=np.array([0.4,0.25875000000000004,0.1])
-a21=np.array([0.3725,0.275625,0.1])
+a21=np.array([0.3725,0.275625,0.12])
 a22=np.array([0.345,0.2925,0.1])
 a23=np.array([0.345,0.33875,0.1])
 a24=np.array([0.3625,0.3175,0.1])
 a25=np.array([0.40625,0.3175,0.1])
 a26=np.array([0.4,0.30625,0.1])
-a27=np.array([0.385625,0.29500000000000004,0.1])
+a27=np.array([0.385625,0.29500000000000004,0.12])
 a28=np.array([0.37124999999999997,0.28375,0.1])
 a29=np.array([0.37124999999999997,0.34750000000000003,0.1])
-a30=np.array([0.36875,0.355,0.1])
+a30=np.array([0.36875,0.355,0.12])
 a31=np.array([0.35125,0.36250000000000004,0.1])
 a32=np.array([0.35125,0.38749999999999996,0.1])
-a33=np.array([0.345625,0.38187499999999996,0.1])
+a33=np.array([0.345625,0.38187499999999996,0.12])
 a34=np.array([0.33999999999999997,0.37625,0.1])
 a35=np.array([0.3725,0.36375,0.1])
 a36=np.array([0.3725,0.38749999999999996,0.1])
-a37=np.array([0.365625,0.38249999999999995,0.1])
+a37=np.array([0.365625,0.38249999999999995,0.12])
 a38=np.array([0.35875,0.37750000000000006,0.1])
 a39=np.array([0.4075,0.37750000000000006,0.1])
-a40=np.array([0.400625,0.37,0.1])
+a40=np.array([0.400625,0.37,0.12])
 a41=np.array([0.39375,0.36250000000000004,0.1])
 a42=np.array([0.38375000000000004,0.39,0.1])
-a43=np.array([0.365625,0.39249999999999996,0.1])
+a43=np.array([0.365625,0.39249999999999996,0.12])
 a44=np.array([0.34750000000000003,0.395,0.1])
 a45=np.array([0.34750000000000003,0.42125,0.1])
-a46=np.array([0.359375,0.406875,0.1])
+a46=np.array([0.359375,0.406875,0.12])
 a47=np.array([0.37124999999999997,0.39249999999999996,0.1])
 a48=np.array([0.37124999999999997,0.42625,0.1])
-a49=np.array([0.359375,0.416875,0.1])
+a49=np.array([0.359375,0.416875,0.12])
 a50=np.array([0.34750000000000003,0.4075,0.1])
 a51=np.array([0.4075,0.4075,0.1])
-a52=np.array([0.4325,0.27,0.1])
+a52=np.array([0.4325,0.27,0.10005])
 b1=np.array([0.4575,0.1325,0.1])
 b2=np.array([0.4425,0.1325,0.1])
 b3=np.array([0.44375,0.14625,0.1])
@@ -320,7 +359,7 @@ b4=np.array([0.44875,0.16625,0.1])
 b5=np.array([0.4575,0.15875,0.1])
 b6=np.array([0.49124999999999996,0.12875,0.1])
 b7=np.array([0.49124999999999996,0.16375,0.1])
-b8=np.array([0.48062499999999997,0.16875,0.2])
+b8=np.array([0.48062499999999997,0.16875,0.12])
 b9=np.array([0.47,0.17375000000000002,0.1])
 b10=np.array([0.445,0.17375000000000002,0.1])
 b11=np.array([0.445,0.18875,0.1])
@@ -330,7 +369,7 @@ b14=np.array([0.4925,0.2025,0.1])
 b15=np.array([0.4925,0.18875,0.1])
 b16=np.array([0.4925,0.17375000000000002,0.1])
 b17=np.array([0.47,0.17375000000000002,0.1])
-b18=np.array([0.46375,0.195625,0.2])
+b18=np.array([0.46375,0.195625,0.12])
 b19=np.array([0.4575,0.2175,0.1])
 b20=np.array([0.4425,0.2175,0.1])
 b21=np.array([0.4425,0.23125,0.1])
@@ -338,7 +377,7 @@ b22=np.array([0.44875,0.25125,0.1])
 b23=np.array([0.4575,0.24375,0.1])
 b24=np.array([0.49124999999999996,0.21375,0.1])
 b25=np.array([0.49124999999999996,0.24875,0.1])
-b26=np.array([0.468125,0.2675,0.2])
+b26=np.array([0.468125,0.2675,0.12])
 b27=np.array([0.445,0.28625,0.1])
 b28=np.array([0.445,0.26625,0.1])
 b29=np.array([0.46875,0.26,0.1])
@@ -350,7 +389,7 @@ b34=np.array([0.4925,0.2875,0.1])
 b35=np.array([0.4925,0.27249999999999996,0.1])
 b36=np.array([0.4925,0.26,0.1])
 b37=np.array([0.48125,0.26,0.1])
-b38=np.array([0.463125,0.295625,0.2])
+b38=np.array([0.463125,0.295625,0.12])
 b39=np.array([0.445,0.33125000000000004,0.1])
 b40=np.array([0.445,0.31125,0.1])
 b41=np.array([0.46875,0.305,0.1])
@@ -362,7 +401,7 @@ b46=np.array([0.4925,0.3325,0.1])
 b47=np.array([0.4925,0.3175,0.1])
 b48=np.array([0.4925,0.305,0.1])
 b49=np.array([0.48125,0.305,0.1])
-b50=np.array([0.468125,0.325625,0.2])
+b50=np.array([0.468125,0.325625,0.12])
 b51=np.array([0.45499999999999996,0.34625,0.1])
 b52=np.array([0.4425,0.34625,0.1])
 b53=np.array([0.4425,0.35875,0.1])
@@ -376,7 +415,7 @@ b60=np.array([0.49375,0.375,0.1])
 b61=np.array([0.49375,0.36,0.1])
 b62=np.array([0.49375,0.345,0.1])
 b63=np.array([0.48125,0.345,0.1])
-b64=np.array([0.468125,0.36812500000000004,0.2])
+b64=np.array([0.468125,0.36812500000000004,0.12])
 b65=np.array([0.45499999999999996,0.39125,0.1])
 b66=np.array([0.4425,0.39125,0.1])
 b67=np.array([0.4425,0.40375000000000005,0.1])
@@ -390,11 +429,11 @@ b74=np.array([0.49375,0.42000000000000004,0.1])
 b75=np.array([0.49375,0.405,0.1])
 b76=np.array([0.49375,0.39,0.1])
 b77=np.array([0.48125,0.39,0.1])
-b78=np.array([0.47,0.41125,0.2])
+b78=np.array([0.47,0.41125,0.12])
 b79=np.array([0.45875,0.4325,0.1])
 b80=np.array([0.445,0.44999999999999996,0.1])
 b81=np.array([0.4925,0.44999999999999996,0.1])
-b82=np.array([0.46875,0.47562499999999996,0.2])
+b82=np.array([0.46875,0.47562499999999996,0.12])
 b83=np.array([0.445,0.50125,0.1])
 b84=np.array([0.445,0.48124999999999996,0.1])
 b85=np.array([0.46875,0.475,0.1])
@@ -406,7 +445,7 @@ b90=np.array([0.4925,0.5025000000000001,0.1])
 b91=np.array([0.4925,0.48750000000000004,0.1])
 b92=np.array([0.4925,0.475,0.1])
 b93=np.array([0.48125,0.475,0.1])
-b94=np.array([0.463125,0.515625,0.2])
+b94=np.array([0.463125,0.515625,0.12])
 b95=np.array([0.445,0.54375,0.1])
 b96=np.array([0.445,0.52375,0.1])
 b97=np.array([0.46875,0.5175,0.1])
@@ -418,6 +457,9 @@ b102=np.array([0.4925,0.545,0.1])
 b103=np.array([0.4925,0.53,0.1])
 b104=np.array([0.4925,0.5175,0.1])
 b105=np.array([0.48125,0.5175,0.1])
+
+
+end_point=np.array([-0.13407963,-0.53606879 ,0.15410902])#, -2.45, 1.57, 0.0])
 # q0= np.array([0.25, 0.1,  0.1 ])
 # q1= np.array( [0.25, 0.6 , 0.1 ])
 # q2= np.array( [0.5 , 0.6 , 0.1 ])
@@ -426,25 +468,27 @@ b105=np.array([0.48125,0.5175,0.1])
 #边框数据测试
 
 
-t_total = 177
+t_total = 173
 
 ######################################
 ## USER CODE ENDS HERE
 ######################################
-n=127
-iswriting = True
+n=130
 liu_start_time = 32 * t_total / n
 liu_end_time = 46 * t_total / n 
 
 liu_joint_data = [] # 用于存储关节角度
 liu_time_data = []  # 用于存储时间戳
+
+pendown = False
+
 while not glfw.window_should_close(window):
     time_prev = data.time
 
-    while (data.time - time_prev < 1.0/1.0):
+    while (data.time - time_prev < 1.0/1):
         # Store trajectory
         mj_end_eff_pos = data.site_xpos[0]
-        if (iswriting == True):
+        if (mj_end_eff_pos[2] < 0.1 and pendown == True):
             traj_points.append(mj_end_eff_pos.copy())
         if len(traj_points) > MAX_TRAJ:
             traj_points.pop(0)
@@ -457,195 +501,412 @@ while not glfw.window_should_close(window):
         ######################################
         # Desired end-effector position, this line is just an example
         #L
-        if (data.time < 0.6*t_total/n):
-            X_ref = LinearInterpolate(q0, q1, data.time, 0.6*t_total/n)
-        elif (data.time <1.3* t_total/n):
-            X_ref = LinearInterpolate(q1, q1, data.time - 0.6*t_total/n, 0.7*t_total/n)
-        
-        elif (data.time <2* t_total/n):
-            X_ref = LinearInterpolate(q1, q2, data.time - 1.3*t_total/n, 0.7*t_total/n)
-        elif (data.time <2.3* t_total/n):
-            X_ref = LinearInterpolate(q2, q2, data.time - 2*t_total/n, 0.3*t_total/n)
-            iswriting = False
-        elif (2.3* t_total/n < data.time <2.5* t_total/n):
-            X_ref = QuadBezierInterpolate(q2, q3, q4, data.time - 2.3*t_total/n, 0.2*t_total/n)
-
-        #i
-        elif (2.5* t_total/n<data.time <3* t_total/n):
-            X_ref = LinearInterpolate(q4, q4, data.time - 2.5*t_total/n, 0.5*t_total/n)
-        elif (data.time <3.8* t_total/n):
-            iswriting = True
-            X_ref = LinearInterpolate(q4, q5, data.time - 3*t_total/n, 0.8*t_total/n)
+        if (data.time <0.3* t_total/n):
+            X_ref = LinearInterpolate(q0, q0, data.time, 0.3*t_total/n)
+        elif (data.time < 0.7*t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(q0, q1, data.time, 0.7*t_total/n)
+        elif (data.time <1.6* t_total/n):
+            X_ref = LinearInterpolate(q1, q1, data.time - 0.7*t_total/n, 0.8*t_total/n)
             
-        elif (data.time <4.2* t_total/n):
-            X_ref = LinearInterpolate(q5, q5, data.time - 3.8*t_total/n, 0.4*t_total/n)
-        elif (data.time <5* t_total/n):
-
-            X_ref = QuadBezierInterpolate(q5, q6, q7, data.time - 4*t_total/n, t_total/n)
-          
         
-        elif (data.time <6* t_total/n):
-            X_ref = LinearInterpolate(q7, q8, data.time - 5*t_total/n, t_total/n)
-        elif (data.time <7* t_total/n):
-            X_ref = QuadBezierInterpolate(q8, q9, q10, data.time - 6*t_total/n, t_total/n)
-        elif (data.time <8* t_total/n):
-            X_ref = QuadBezierInterpolate(q10, q11, q12, data.time - 7*t_total/n, t_total/n)
-        elif (data.time <9* t_total/n):
-            X_ref = LinearInterpolate(q12, q13, data.time - 8*t_total/n, t_total/n)
-        elif (data.time <10* t_total/n):
-            X_ref = QuadBezierInterpolate(q13, q14, q15, data.time - 9*t_total/n, t_total/n)
-        elif (data.time <11* t_total/n):
-            X_ref = LinearInterpolate(q15, q16, data.time - 10*t_total/n, t_total/n)
-        elif (data.time <12* t_total/n):
-            X_ref = LinearInterpolate(q16, q17, data.time - 11*t_total/n, t_total/n)
-        elif (data.time <13* t_total/n):
-            X_ref = LinearInterpolate(q17, q18, data.time - 12*t_total/n, t_total/n)
-        elif (data.time <14* t_total/n):
-            X_ref = QuadBezierInterpolate(q18, q19, q20, data.time - 13*t_total/n, t_total/n)
-        elif (data.time <15* t_total/n):
-            X_ref = LinearInterpolate(q20, q21, data.time - 14*t_total/n, t_total/n)
-        elif (data.time <16* t_total/n):
-            X_ref = QuadBezierInterpolate(q21, q22, q23, data.time - 15*t_total/n, t_total/n)
-        elif (data.time <16.8* t_total/n):
-            X_ref = LinearInterpolate(q23, q24, data.time - 16*t_total/n, 0.8*t_total/n)
-        elif (data.time <17*t_total/n):
-            X_ref = QuadBezierInterpolate(q24, q25, q26, data.time - 16.8*t_total/n, 0.2*t_total/n)
+        elif (data.time <2.0* t_total/n):
+            X_ref = LinearInterpolate(q1, q2, data.time - 1.6*t_total/n, 0.4*t_total/n)
+        elif (data.time <2.5* t_total/n):
+            X_ref = LinearInterpolate(q2, q2, data.time - 2.0*t_total/n, 0.5*t_total/n)
+        elif (data.time <2.9* t_total/n):
+            X_ref = QuadBezierInterpolate(q2, q3, q4, data.time - 2.5*t_total/n, 0.4*t_total/n)
+            pendown = False
+        
+        #i
+        elif (data.time <3.6* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(q4, q4, data.time - 2.9*t_total/n, 0.7*t_total/n)
+        elif (data.time <4.3* t_total/n):
+            X_ref = LinearInterpolate(q4, q5, data.time - 3.6*t_total/n, 0.6*t_total/n)
+        elif (data.time <4.9* t_total/n):
+            X_ref = LinearInterpolate(q5, q5, data.time - 4.3*t_total/n, 0.6*t_total/n)
+        elif (data.time <5.3* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(q5, q6, q7, data.time - 4.9*t_total/n, 0.4*t_total/n)
+        
+        #u
+        elif (data.time <5.9* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(q7, q7, data.time - 5.3*t_total/n, 0.6*t_total/n)
+            
+        
+        elif (data.time <6.4* t_total/n):
+            X_ref = LinearInterpolate(q7, q8, data.time - 5.9*t_total/n, 0.5*t_total/n)
+        elif (data.time <6.9* t_total/n):
+            X_ref = LinearInterpolate(q8, q8, data.time - 6.4*t_total/n, 0.5*t_total/n)
+        
+        elif (data.time <7.7* t_total/n):
+            X_ref = QuadBezierInterpolate(q8, q9, q10, data.time - 6.9*t_total/n, 0.8*t_total/n)
+        elif (data.time <8.5* t_total/n):
+            X_ref = QuadBezierInterpolate(q10, q11, q12, data.time - 7.7*t_total/n, 0.8*t_total/n)
+        elif (data.time <9.1* t_total/n):
+            X_ref = LinearInterpolate(q12, q12, data.time - 8.5*t_total/n, 0.6*t_total/n)
+        elif (data.time <9.5* t_total/n):
+            X_ref = LinearInterpolate(q12, q13, data.time - 9.1*t_total/n, 0.4*t_total/n)
+        elif (data.time <9.9* t_total/n):
+            X_ref = LinearInterpolate(q13, q13, data.time - 9.5*t_total/n, 0.4*t_total/n)
+        elif (data.time <10.3* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(q13, q14, q15, data.time - 9.9*t_total/n,0.4* t_total/n)
+            
+
+            #z
+        elif (data.time <10.7* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(q15, q15, data.time - 10.3*t_total/n, 0.4*t_total/n)
+            
+        elif (data.time <11.3* t_total/n):
+            X_ref = LinearInterpolate(q15, q16, data.time - 10.7*t_total/n,0.5* t_total/n)
+        elif (data.time <11.7* t_total/n):
+            X_ref = LinearInterpolate(q16, q16, data.time - 11.3*t_total/n, 0.4*t_total/n)
+        elif (data.time <12.1* t_total/n):
+            X_ref = LinearInterpolate(q16, q17, data.time - 11.7*t_total/n, 0.4*t_total/n)
+        elif (data.time <12.8* t_total/n):
+            X_ref = LinearInterpolate(q17, q17, data.time - 12.1*t_total/n, 0.7*t_total/n)
+        elif (data.time <13.2* t_total/n):
+            X_ref = LinearInterpolate(q17, q18, data.time - 12.8*t_total/n,0.4* t_total/n)
+        elif (data.time <13.6* t_total/n):
+            X_ref = LinearInterpolate(q18, q18, data.time - 13.2*t_total/n, 0.4*t_total/n)
+        elif (data.time <13.9* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(q18, q19, q20, data.time - 13.9*t_total/n, 0.3*t_total/n)
+            
+
+            #i
+        elif (data.time <14.6* t_total/n):
+            # pendown = True
+            X_ref = LinearInterpolate(q20, q20, data.time - 14.3*t_total/n, 0.7*t_total/n)
+        elif (data.time <15.2* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(q20, q21, data.time - 14.6*t_total/n, 0.6*t_total/n)
+        elif (data.time <16.0* t_total/n):
+            X_ref = LinearInterpolate(q21, q21, data.time - 15.2*t_total/n, 0.8*t_total/n)
+        elif (data.time <16.3* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(q21, q22, q23, data.time - 16*t_total/n, 0.3*t_total/n)
+            
+            
+            
+            #x
+        elif (data.time <16.6* t_total/n):
+            X_ref = LinearInterpolate(q23, q23, data.time - 16.3*t_total/n, 0.3*t_total/n)
+
+        elif (data.time <17.2* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(q23, q24, data.time - 16.6*t_total/n, 0.6*t_total/n)
+        elif (data.time <17.9* t_total/n):
+            X_ref = LinearInterpolate(q24, q24, data.time - 17.2*t_total/n, 0.7*t_total/n)
+            pendown = False
+
+        elif (data.time <18.2*t_total/n):
+            pendown = False
+            X_ref = LinearInterpolate(q24, q26, data.time - 17.9*t_total/n, 0.3*t_total/n)
         
   ################################################################################################################3
-        elif (data.time <18* t_total/n):
-            X_ref = LinearInterpolate(q26, q27, data.time - 17*t_total/n, t_total/n)
-        elif (data.time <19* t_total/n):
-            X_ref = QuadBezierInterpolate(q27, q28, q29, data.time - 18*t_total/n, t_total/n)
-        elif (data.time <20* t_total/n):
-            X_ref = LinearInterpolate(q29, q30, data.time - 19*t_total/n, t_total/n)
+        
+        elif (data.time <18.6* t_total/n):
+            X_ref = LinearInterpolate(q26, q26, data.time - 18.2*t_total/n, 0.4*t_total/n)
+        elif (data.time <18.9* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(q26, q27, data.time - 18.6*t_total/n, 0.3*t_total/n)
+        elif (data.time <19.6* t_total/n):
+            X_ref = LinearInterpolate(q27, q27, data.time - 18.9*t_total/n, 0.7*t_total/n)
+        elif (data.time <19.9* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(q27, q28, q29, data.time - 19.6*t_total/n, 0.3*t_total/n)
+
+            #u
+        elif (data.time <20.5* t_total/n):
+            pendown = False
+            X_ref = LinearInterpolate(q29, q29, data.time - 19.9*t_total/n, 0.6*t_total/n)
         elif (data.time <21* t_total/n):
-            X_ref = QuadBezierInterpolate(q30, q31, q32, data.time - 20*t_total/n, t_total/n)
-        elif (data.time <22* t_total/n):
-            X_ref = QuadBezierInterpolate(q32, q33, q34, data.time - 21*t_total/n, t_total/n)
-        elif (data.time <23* t_total/n):
-            X_ref = LinearInterpolate(q34, q35, data.time - 22*t_total/n, t_total/n)
-        elif (data.time <24* t_total/n):
-            X_ref = QuadBezierInterpolate(q35, q36, q37, data.time - 23*t_total/n, t_total/n)
+            pendown = True
+            X_ref = LinearInterpolate(q29, q30, data.time - 20.5*t_total/n, 0.5*t_total/n)
+        elif (data.time <21.5* t_total/n):
+            X_ref = LinearInterpolate(q30, q30, data.time - 21*t_total/n, 0.5*t_total/n)
+        elif (data.time <22.3* t_total/n):
+            X_ref = QuadBezierInterpolate(q30, q31, q32, data.time - 21.5*t_total/n, 0.8*t_total/n)
+
+        elif (data.time <23.1* t_total/n):
+            X_ref = QuadBezierInterpolate(q32, q33, q34, data.time - 22.3*t_total/n, 0.8*t_total/n)
+
+        elif (data.time <23.5* t_total/n):
+        
+            X_ref = LinearInterpolate(q34, q35, data.time - 23.1*t_total/n, 0.4*t_total/n)
+        elif (data.time <23.9* t_total/n):
+            X_ref = LinearInterpolate(q35, q35, data.time - 23.5*t_total/n, 0.4*t_total/n)
+        elif (data.time <24.3* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(q35, q36, q37, data.time - 23.9*t_total/n, 0.4*t_total/n)
+            #a
+
         elif (data.time <25* t_total/n):
-            X_ref = LinearInterpolate(q37, q38, data.time - 24*t_total/n, t_total/n)
-        elif (data.time <26* t_total/n):
-            X_ref = LinearInterpolate(q38, q39, data.time - 25*t_total/n, t_total/n)
+
+            X_ref = LinearInterpolate(q37, q37, data.time - 24.3*t_total/n, 0.7*t_total/n)
+        elif (data.time <25.5* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(q37, q38, data.time - 25*t_total/n,0.5*t_total/n)
+        elif (data.time <25.9* t_total/n):
+            X_ref = LinearInterpolate(q38, q38, data.time - 25.5*t_total/n, 0.4*t_total/n)
+        elif (data.time <26.3* t_total/n):
+            X_ref = LinearInterpolate(q38, q39, data.time - 25.9*t_total/n, 0.4*t_total/n)
         elif (data.time <27* t_total/n):
-            X_ref = QuadBezierInterpolate(q39, q40, q41, data.time - 26*t_total/n, t_total/n)
-        elif (data.time <28* t_total/n):
-            X_ref = LinearInterpolate(q41, q42, data.time - 27*t_total/n, t_total/n)
-        elif (data.time <29* t_total/n):
-            X_ref = QuadBezierInterpolate(q42, q43, q44, data.time - 28*t_total/n, t_total/n)
-        elif (data.time <30* t_total/n):
-            X_ref = LinearInterpolate(q44, q45, data.time - 29*t_total/n, t_total/n)
-        elif (data.time <31* t_total/n):
-            X_ref = LinearInterpolate(q45, q46, data.time -30* t_total/n, t_total/n)
-        elif (data.time <32* t_total/n):
-            X_ref = LinearInterpolate(q46, q47, data.time - 31*t_total/n, t_total/n)
+            pendown = False
+            X_ref = LinearInterpolate(q39, q39, data.time - 26.3*t_total/n, 0.7*t_total/n)
+        elif (data.time <27.4* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(q39, q40, q41, data.time - 27*t_total/n, 0.4*t_total/n)
+        elif (data.time <28.3* t_total/n):
+            X_ref = LinearInterpolate(q41, q41, data.time - 27.4*t_total/n, 0.9*t_total/n)
+        elif (data.time <28.7* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(q41, q42, data.time - 28.3*t_total/n, 0.4*t_total/n)
+        elif (data.time <29.1* t_total/n):
+            X_ref = LinearInterpolate(q42, q42, data.time - 28.7*t_total/n, 0.4*t_total/n)
+        elif (data.time <29.5* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(q42, q43, q44, data.time - 29.1*t_total/n, 0.4*t_total/n)
+            #n
+        elif (data.time <29.9* t_total/n):
+
+            X_ref = LinearInterpolate(q44, q44, data.time - 29.5*t_total/n, 0.4*t_total/n)
+        elif (data.time <30.3* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(q44, q45, data.time - 29.9*t_total/n, 0.4*t_total/n)
+        elif (data.time <30.7* t_total/n):
+            X_ref = LinearInterpolate(q45, q45, data.time - 30.3*t_total/n, 0.4*t_total/n)
+        elif (data.time <31.1* t_total/n):
+            X_ref = LinearInterpolate(q45, q46, data.time -30.7* t_total/n, 0.4*t_total/n)
+        elif (data.time <31.7* t_total/n):
+            X_ref = LinearInterpolate(q46, q46, data.time - 31.1*t_total/n, 0.6*t_total/n)
+        elif (data.time <32.1* t_total/n):
+            X_ref = LinearInterpolate(q46, q47, data.time - 31.7*t_total/n, 0.4*t_total/n)
+        elif (data.time <32.5* t_total/n):
+            pendown = False
+            X_ref = LinearInterpolate(q47, q47, data.time - 32.1*t_total/n, 0.4*t_total/n)
 
 
 
-#刘
+
         elif (data.time <33* t_total/n):
-            X_ref = QuadBezierInterpolate(q47, q48, a1, data.time - 32*t_total/n, t_total/n)
+            X_ref = QuadBezierInterpolate(q47, q48, a1, data.time - 32.5*t_total/n, 0.5*t_total/n)
         elif (data.time <34* t_total/n):
-            X_ref = LinearInterpolate(a1, a2, data.time - 33*t_total/n, t_total/n)
-        elif (data.time <35* t_total/n):
-            X_ref = QuadBezierInterpolate(a2, a3, a4, data.time - 34*t_total/n, t_total/n)
+            X_ref = LinearInterpolate(a1, a1, data.time - 32.5*t_total/n, 1.5*t_total/n)      
+        elif (data.time <34.4* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a1, a2, data.time - 34*t_total/n,0.4*t_total/n)
+        elif (data.time <34.8* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(a2, a3, a4, data.time - 34.4*t_total/n, 0.4*t_total/n)
+        elif (data.time <35.2* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a4, a4, data.time -34.8* t_total/n, 0.4*t_total/n)    
+            
         elif (data.time <36* t_total/n):
-            X_ref = LinearInterpolate(a4, a5, data.time -35* t_total/n, t_total/n)
-        elif (data.time <37* t_total/n):
-            X_ref = QuadBezierInterpolate(a5, a6, a7, data.time - 36*t_total/n, t_total/n)
-        elif (data.time <38* t_total/n):
-            X_ref = QuadBezierInterpolate(a7, a8, a9, data.time - 37*t_total/n, t_total/n)
-        elif (data.time <39* t_total/n):
-            X_ref = QuadBezierInterpolate(a9, a10, a11, data.time - 38*t_total/n, t_total/n)
+            X_ref = LinearInterpolate(a4, a5, data.time -35.2* t_total/n, 0.8*t_total/n)
+        elif (data.time <36.2* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(a5, a6, a7, data.time - 36*t_total/n,0.2* t_total/n)
+        elif (data.time <37.2* t_total/n):
+            pendown = True
+            X_ref = QuadBezierInterpolate(a7, a8, a9, data.time - 36.2*t_total/n, t_total/n)
+        elif (data.time <38.7* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(a9, a10, a11, data.time - 37.2*t_total/n,1.5* t_total/n)
+        elif (data.time <39.7* t_total/n):
+            pendown = True
+            X_ref = QuadBezierInterpolate(a11, a12, a13, data.time - 38.7*t_total/n, t_total/n)
         elif (data.time <40* t_total/n):
-            X_ref = QuadBezierInterpolate(a11, a12, a13, data.time - 39*t_total/n, t_total/n)
+            X_ref = LinearInterpolate(a13, a13, data.time - 39.7*t_total/n, 0.3*t_total/n)    
+            
         elif (data.time <41* t_total/n):
+            pendown = False
             X_ref = QuadBezierInterpolate(a13, a14, a15, data.time - 40*t_total/n, t_total/n)
-        elif (data.time <42* t_total/n):
-            X_ref = LinearInterpolate(a15, a16, data.time - 41*t_total/n, t_total/n)
-        elif (data.time <43* t_total/n):
-            X_ref = QuadBezierInterpolate(a16, a17, a18, data.time - 42*t_total/n, t_total/n)
-        elif (data.time <44* t_total/n):
-            X_ref = LinearInterpolate(a18, a19, data.time -43* t_total/n, t_total/n)
-        elif (data.time <45* t_total/n):
-            X_ref = LinearInterpolate(a19, a20, data.time - 44*t_total/n, t_total/n)
+        elif (data.time <41.7* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a15, a16, data.time - 41*t_total/n,0.7*t_total/n)
+        elif (data.time <42.6* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(a16, a17, a18, data.time - 41.7*t_total/n, 0.9*t_total/n)
+        elif (data.time <43.4* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a18, a19, data.time -42.6* t_total/n, 0.8*t_total/n)
+        elif (data.time <43.9* t_total/n):
+            X_ref = LinearInterpolate(a19, a19, data.time -43.4* t_total/n, 0.5*t_total/n)    
+            
+        elif (data.time <44.4* t_total/n):
+            X_ref = LinearInterpolate(a19, a20, data.time - 43.9*t_total/n,0.5* t_total/n)
+        elif (data.time <44.7* t_total/n):
+            X_ref = LinearInterpolate(a20, a20, data.time - 44.4*t_total/n,0.3* t_total/n)
+            
         elif (data.time <46* t_total/n):
-            X_ref = QuadBezierInterpolate(a20, a21, a22, data.time - 45*t_total/n, t_total/n)
+            pendown = False
+            X_ref = QuadBezierInterpolate(a20, a21, a22, data.time - 44.7*t_total/n, 1.3*t_total/n)
 #子
-        elif (data.time <47* t_total/n):
-            X_ref = LinearInterpolate(a22, a23, data.time - 46*t_total/n, t_total/n)
-        elif (data.time <48* t_total/n):
-            X_ref = LinearInterpolate(a23, a24, data.time - 47*t_total/n, t_total/n)
-        elif (data.time <49* t_total/n):
-            X_ref = LinearInterpolate(a24, a25, data.time - 48*t_total/n, t_total/n)
+        elif (data.time <46.5* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a22, a22, data.time - 46*t_total/n, 0.5*t_total/n)
+        
+        elif (data.time <47.5* t_total/n):
+            X_ref = LinearInterpolate(a22, a23, data.time - 46.5*t_total/n, t_total/n)
+        elif (data.time <47.9* t_total/n):
+            X_ref = LinearInterpolate(a23, a23, data.time - 47.5*t_total/n, 0.4*t_total/n)    
+            
+        elif (data.time <48.5* t_total/n):
+            X_ref = LinearInterpolate(a23, a24, data.time - 47.9*t_total/n, 0.6*t_total/n)
+        elif (data.time <48.9* t_total/n):
+            X_ref = LinearInterpolate(a24, a24, data.time - 48.5*t_total/n, 0.4*t_total/n)    
+            
         elif (data.time <50* t_total/n):
-            X_ref = LinearInterpolate(a25, a26, data.time - 49*t_total/n, t_total/n)
-        elif (data.time <51* t_total/n):
-            X_ref = QuadBezierInterpolate(a26, a27, a28, data.time - 50*t_total/n, t_total/n)
-        elif (data.time <52* t_total/n):
-            X_ref = LinearInterpolate(a28, a29, data.time - 51*t_total/n, t_total/n)
+            X_ref = LinearInterpolate(a24, a25, data.time - 48.9*t_total/n, 1.1*t_total/n)
+        elif (data.time <50.3* t_total/n):
+            X_ref = LinearInterpolate(a25, a25, data.time - 50*t_total/n, 0.3*t_total/n)    
+            
+        elif (data.time <50.8* t_total/n):
+            X_ref = LinearInterpolate(a25, a26, data.time - 50.3*t_total/n, 0.5*t_total/n)
+        elif (data.time <51.3* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(a26, a27, a28, data.time - 50.8*t_total/n, 0.5*t_total/n)
+        elif (data.time <51.6* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a28, a28, data.time - 51.3*t_total/n, 0.3*t_total/n)    
+            
+        elif (data.time <52.5* t_total/n):
+            X_ref = LinearInterpolate(a28, a29, data.time - 51.6*t_total/n, 0.9*t_total/n)
         elif (data.time <53* t_total/n):
-            X_ref = QuadBezierInterpolate(a29, a30, a31, data.time - 52*t_total/n, t_total/n)
+            X_ref = LinearInterpolate(a29, a29, data.time - 52.5*t_total/n, 0.5*t_total/n)    
+            
+        elif (data.time <53.4* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(a29, a30, a31, data.time - 53*t_total/n, 0.4*t_total/n)
 #轩
-        elif (data.time <54* t_total/n):
-            X_ref = LinearInterpolate(a31, a32, data.time - 53*t_total/n, t_total/n)
+        elif (data.time <53.9* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a31, a31, data.time - 53.4*t_total/n, 0.5*t_total/n)
+
+
+        elif (data.time <54.3* t_total/n):
+            X_ref = LinearInterpolate(a31, a32, data.time - 53.9*t_total/n,0.4*t_total/n)
+        elif (data.time <54.7* t_total/n):
+            X_ref = LinearInterpolate(a32, a32, data.time - 54.3*t_total/n,0.4*t_total/n)    
+            
         elif (data.time <55* t_total/n):
-            X_ref = QuadBezierInterpolate(a32, a33, a34, data.time - 54*t_total/n, t_total/n)
-        elif (data.time <56* t_total/n):
-            X_ref = LinearInterpolate(a34, a35, data.time - 55*t_total/n, t_total/n)
-        elif (data.time <57* t_total/n):
-            X_ref = LinearInterpolate(a35, a36, data.time -56*t_total/n, t_total/n)
-        elif (data.time <58* t_total/n):
-            X_ref = QuadBezierInterpolate(a36, a37, a38, data.time - 57*t_total/n, t_total/n)
+            pendown = False
+            X_ref = QuadBezierInterpolate(a32, a33, a34, data.time - 54.7*t_total/n,0.3* t_total/n)
+        elif (data.time <55.4* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a34, a34, data.time - 55*t_total/n,0.4*t_total/n)    
+            
+        elif (data.time <55.9* t_total/n):
+            X_ref = LinearInterpolate(a34, a35, data.time - 55.4*t_total/n, 0.5*t_total/n)
+        elif (data.time <56.4* t_total/n):
+            X_ref = LinearInterpolate(a35, a35, data.time - 55.9*t_total/n, 0.5*t_total/n)    
+            
+        elif (data.time <56.9* t_total/n):
+            X_ref = LinearInterpolate(a35, a36, data.time -56.4*t_total/n, 0.5*t_total/n)
+        elif (data.time <57.3* t_total/n):
+            X_ref = LinearInterpolate(a36, a36, data.time -56.9*t_total/n, 0.4*t_total/n)    
+            
+        elif (data.time <57.2* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(a36, a37, a38, data.time - 56.9*t_total/n,0.3*t_total/n)
+            
+            
+        elif (data.time <58.2* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a38, a39, data.time - 57.3*t_total/n, 0.9*t_total/n)
+        elif (data.time <58.6* t_total/n):
+            X_ref = LinearInterpolate(a39, a39, data.time - 58.2*t_total/n, 0.4*t_total/n)    
+            
         elif (data.time <59* t_total/n):
-            X_ref = LinearInterpolate(a38, a39, data.time - 58*t_total/n, t_total/n)
-        elif (data.time <60* t_total/n):
-            X_ref = QuadBezierInterpolate(a39, a40, a41, data.time - 59*t_total/n, t_total/n)
-        elif (data.time <61* t_total/n):
-            X_ref = LinearInterpolate(a41, a42, data.time - 60*t_total/n, t_total/n)
-        elif (data.time <62* t_total/n):
-            X_ref = QuadBezierInterpolate(a42, a43, a44, data.time - 51*t_total/n, t_total/n)
-        elif (data.time <63* t_total/n):
-            X_ref = LinearInterpolate(a44, a45, data.time -62* t_total/n, t_total/n)
-        elif (data.time <64* t_total/n):
-            X_ref = QuadBezierInterpolate(a45, a46, a47, data.time - 63*t_total/n, t_total/n)
-        elif (data.time <65* t_total/n):
-            X_ref = LinearInterpolate(a47, a48, data.time -64*t_total/n, t_total/n)
+            pendown = False
+            X_ref = QuadBezierInterpolate(a39, a40, a41, data.time - 58.6*t_total/n, 0.4*t_total/n)
+        elif (data.time <59.4* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a41, a41, data.time - 59*t_total/n, 0.4*t_total/n)    
+            
+        elif (data.time <59.9* t_total/n):
+            X_ref = LinearInterpolate(a41, a42, data.time - 59.4*t_total/n, 0.5*t_total/n)
+        elif (data.time <60.4* t_total/n):
+            X_ref = LinearInterpolate(a42, a42, data.time - 59.9*t_total/n, 0.5*t_total/n)    
+            
+        elif (data.time <61.1* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(a42, a43, a44, data.time - 60.4*t_total/n, 0.7*t_total/n)
+        elif (data.time <61.6* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a44, a44, data.time - 61.1*t_total/n, 0.5*t_total/n)    
+            
+        elif (data.time <62.2* t_total/n):
+            X_ref = LinearInterpolate(a44, a45, data.time -61.6* t_total/n, 0.6*t_total/n)
+        elif (data.time <62.6* t_total/n):
+            X_ref = LinearInterpolate(a45, a45, data.time -62.2* t_total/n, 0.4*t_total/n)    
+            
+        elif (data.time <63.2* t_total/n):
+            pendown = False
+            X_ref = QuadBezierInterpolate(a45, a46, a47, data.time - 62.6*t_total/n,0.6*t_total/n)
+        elif (data.time <63.6* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a47, a47, data.time -63.2*t_total/n, 0.4*t_total/n)    
+            
+        elif (data.time <64.1* t_total/n):
+            X_ref = LinearInterpolate(a47, a48, data.time -63.6*t_total/n, 0.5*t_total/n)
+        elif (data.time <65.2* t_total/n):
+            X_ref = LinearInterpolate(a48, a48, data.time -64.7*t_total/n, 0.5*t_total/n)    
+            
         elif (data.time <66* t_total/n):
-            X_ref = QuadBezierInterpolate(a48, a49, a50, data.time - 65*t_total/n, t_total/n)
-        elif (data.time <67* t_total/n):
-            X_ref = LinearInterpolate(a50, a51, data.time - 66*t_total/n, t_total/n)
+            pendown = False
+            X_ref = QuadBezierInterpolate(a48, a49, a50, data.time - 65.2*t_total/n, 0.8*t_total/n)
+        elif (data.time <67.1* t_total/n):
+            pendown = True
+            X_ref = LinearInterpolate(a50, a51, data.time - 66*t_total/n, 1.1*t_total/n)
+        elif (data.time <67.5* t_total/n):
+            X_ref = LinearInterpolate(a51, a51, data.time - 67.1*t_total/n, 0.4*t_total/n)    
+            
+        elif (data.time <68* t_total/n-0.1):
+            pendown = False
+            X_ref = QuadBezierInterpolate(a51, a52, b1, data.time - 67*t_total/n, t_total/n-0.1)
         elif (data.time <68* t_total/n):
-            X_ref = QuadBezierInterpolate(a51, a52, b1, data.time - 67*t_total/n, t_total/n-0.05)
+            pendown = False
+            X_ref =  LinearInterpolate(b1, b1, data.time - 68*t_total/n, 0.1)
+            
 
     #2    
         
-        elif (data.time <68* t_total/n-0.05):
-            X_ref = QuadBezierInterpolate(b1, b2, b3, data.time - 68*t_total/n, t_total/n+0.1)
-        elif (data.time <70* t_total/n+0.05):
-            X_ref = QuadBezierInterpolate(b3, b4, b5, data.time - 69*t_total/n, t_total/n-0.05)
+        elif (data.time <69* t_total/n):
+            pendown = True
+            X_ref = QuadBezierInterpolate(b1, b2, b3, data.time - 68*t_total/n, t_total/n)
+        elif (data.time <70* t_total/n):
+            X_ref = QuadBezierInterpolate(b3, b4, b5, data.time - 69*t_total/n, t_total/n)
         elif (data.time <71* t_total/n):
             X_ref = LinearInterpolate(b5, b6, data.time -70* t_total/n, t_total/n)
         elif (data.time <72* t_total/n):
             X_ref = LinearInterpolate(b6, b7, data.time - 71*t_total/n, t_total/n)
         elif (data.time <73* t_total/n):
+            pendown = False 
             X_ref = QuadBezierInterpolate(b7, b8, b9, data.time - 72*t_total/n, t_total/n)
        #0 
         elif (data.time <74* t_total/n):
+            pendown = True
             X_ref = QuadBezierInterpolate(b9, b10, b11, data.time - 73*t_total/n, t_total/n)
-        elif (data.time <75* t_total/n-0.05):
-            X_ref = QuadBezierInterpolate(b11, b12, b13, data.time - 74*t_total/n, t_total/n-0.05)
-        elif (data.time <76* t_total/n-0.10):
-            X_ref = QuadBezierInterpolate(b13, b14, b15, data.time - 75*(t_total/n-0.05), t_total/n-0.05)
+        elif (data.time <75* t_total/n):
+            X_ref = QuadBezierInterpolate(b11, b12, b13, data.time - 74*t_total/n, t_total/n)
+        elif (data.time <76* t_total/n):
+            X_ref = QuadBezierInterpolate(b13, b14, b15, data.time - 75*(t_total/n), t_total/n)
         elif (data.time <77* t_total/n):
-            X_ref = QuadBezierInterpolate(b15, b16, b17, data.time - 76*(t_total/n-0.10), t_total/n+0.10)
+            X_ref = QuadBezierInterpolate(b15, b16, b17, data.time - 76*(t_total/n), t_total/n)
         elif (data.time <78* t_total/n):
+            pendown = False
             X_ref = QuadBezierInterpolate(b17, b18, b19, data.time - 77*t_total/n, t_total/n)
         #2
         elif (data.time <79* t_total/n):
+            pendown = True
             X_ref = QuadBezierInterpolate(b19, b20, b21, data.time - 78*t_total/n, t_total/n)
         elif (data.time <80* t_total/n):
             X_ref = QuadBezierInterpolate(b21, b22, b23, data.time - 79*t_total/n, t_total/n)
@@ -654,9 +915,11 @@ while not glfw.window_should_close(window):
         elif (data.time <82* t_total/n):
             X_ref = LinearInterpolate(b24, b25, data.time -81* t_total/n, t_total/n)
         elif (data.time <83* t_total/n):
+            pendown = False
             X_ref = QuadBezierInterpolate(b25,b26, b27, data.time - 82*t_total/n, t_total/n)
 #5
         elif (data.time <84* t_total/n):
+            pendown = True
             X_ref = LinearInterpolate(b27, b28, data.time - 83*t_total/n, t_total/n)
         elif (data.time <85* t_total/n):
             X_ref = LinearInterpolate(b28, b29, data.time -84* t_total/n, t_total/n)
@@ -669,10 +932,12 @@ while not glfw.window_should_close(window):
         elif (data.time <89* t_total/n):
             X_ref = QuadBezierInterpolate(b35, b36, b37, data.time - 88*t_total/n, t_total/n)
         elif (data.time <90* t_total/n):
+            pendown = False
             X_ref = QuadBezierInterpolate(b37, b38, b39, data.time - 89*t_total/n, t_total/n)
 #5
 
         elif (data.time <91* t_total/n):
+            pendown = True
             X_ref = LinearInterpolate(b39, b40, data.time -90.* t_total/n, t_total/n)
         elif (data.time <92* t_total/n):
             X_ref = LinearInterpolate(b40, b41, data.time - 91*t_total/n, t_total/n)
@@ -685,11 +950,13 @@ while not glfw.window_should_close(window):
         elif (data.time <96* t_total/n):
             X_ref = QuadBezierInterpolate(b47, b48, b49, data.time - 95*t_total/n, t_total/n)
         elif (data.time <97* t_total/n):
+            pendown = False
             X_ref = QuadBezierInterpolate(b49, b50, b51, data.time - 96*t_total/n, t_total/n)
 
 
     #3
         elif (data.time <98* t_total/n):
+            pendown = True
             X_ref = QuadBezierInterpolate(b51, b52, b53, data.time - 97*t_total/n, t_total/n)
         elif (data.time <99* t_total/n):
             X_ref = QuadBezierInterpolate(b53, b54, b55, data.time - 98*t_total/n, t_total/n)
@@ -716,17 +983,21 @@ while not glfw.window_should_close(window):
         elif (data.time <110* t_total/n):
             X_ref = QuadBezierInterpolate(b75, b76, b77, data.time - 109*t_total/n, t_total/n)
         elif (data.time <111* t_total/n):
+            pendown = False
             X_ref = QuadBezierInterpolate(b77, b78, b79, data.time - 110*t_total/n, t_total/n)
 
 #1
         elif (data.time <112* t_total/n):
+            pendown = True
             X_ref = LinearInterpolate(b79, b80, data.time -111* t_total/n, t_total/n)
         elif (data.time <113* t_total/n):
             X_ref = LinearInterpolate(b80, b81, data.time - 112*t_total/n, t_total/n)
         elif (data.time <114* t_total/n):
+            pendown = False
             X_ref = QuadBezierInterpolate(b81, b82, b83, data.time - 113*t_total/n, t_total/n) 
 #5
         elif (data.time <115* t_total/n):
+            pendown = True
             X_ref = LinearInterpolate(b83, b84, data.time - 114*t_total/n, t_total/n)
         elif (data.time <2* t_total/n):
             X_ref = LinearInterpolate(b84, b85, data.time - 115*t_total/n, t_total/n)
@@ -739,9 +1010,11 @@ while not glfw.window_should_close(window):
         elif (data.time <119* t_total/n):
             X_ref = QuadBezierInterpolate(b91, b92, b93, data.time - 119*t_total/n, t_total/n)
         elif (data.time <120* t_total/n):
+            pendown = False
             X_ref = QuadBezierInterpolate(b93, b94, b95, data.time - 120*t_total/n, t_total/n)
 #5
         elif (data.time <121* t_total/n):
+            pendown = True
             X_ref = LinearInterpolate(b95, b96, data.time - 121*t_total/n, t_total/n)
         elif (data.time <122* t_total/n):
             X_ref = LinearInterpolate(b96, b97, data.time - 122*t_total/n, t_total/n)
@@ -752,8 +1025,8 @@ while not glfw.window_should_close(window):
         elif (data.time <125* t_total/n):
             X_ref = QuadBezierInterpolate(b101, b102, b103, data.time - 125*t_total/n, t_total/n)
         elif (data.time <126* t_total/n):
+
             X_ref = QuadBezierInterpolate(b103, b104, b105, data.time - 126*t_total/n, t_total/n)
-        
         
         
         
@@ -769,13 +1042,21 @@ while not glfw.window_should_close(window):
         
 
           
-        elif (data.time <simend):
-            X_ref = LinearInterpolate(b105,b105, data.time - 127*t_total/n, simend-t_total)
+        elif (data.time <126.5* t_total/n):
+            X_ref = LinearInterpolate(b105,b105, data.time - 126*t_total/n, 0.5*t_total/n)
+            pendown = False
+        elif (data.time <175):
+            X_ref = LinearInterpolate(b105,end_point, data.time - 126.5*t_total/n, 175-126.5*t_total/n)
+        elif (data.time <178):
+            X_ref = LinearInterpolate(end_point,end_point, data.time - 175, 3)
             
-            
-            
-            
-            
+        elif (data.time < 180):
+        
+            final_joint_pose = np.array([0.0, -2.32, -1.38, -2.45, 1.57, 0.0])
+            data.qpos[:6] = final_joint_pose
+
+                
+                
             
             
             
@@ -817,14 +1098,13 @@ while not glfw.window_should_close(window):
         # Apply control input
         data.ctrl[:] = cur_ctrl
         mj.mj_step(model, data)
-        data.time += 0.02
+
 
     if (data.time>=simend):
         break
     if liu_start_time <= data.time <= liu_end_time:
         liu_joint_data.append(data.qpos.copy()) 
         liu_time_data.append(data.time)
-
     # get framebuffer viewport
     viewport_width, viewport_height = glfw.get_framebuffer_size(
         window)
@@ -839,7 +1119,7 @@ while not glfw.window_should_close(window):
     mj.mjv_updateScene(model, data, opt, None, cam,
                        mj.mjtCatBit.mjCAT_ALL.value, scene)
     # Add trajectory as spheres
-    for j in range(1, len(traj_points)):
+    for j in range(1, len(traj_points),8):
         if scene.ngeom >= scene.maxgeom:
             break  # avoid overflow
 
@@ -854,7 +1134,7 @@ while not glfw.window_should_close(window):
         # Configure this geom as a line
         geom.type = mj.mjtGeom.mjGEOM_SPHERE  # Use sphere for endpoints
         geom.rgba[:] = LINE_RGBA
-        geom.size[:] = np.array([0.002, 0.002, 0.002])
+        geom.size[:] = np.array([0.004, 0.004, 0.004])
         geom.pos[:] = midpoint
         geom.mat[:] = np.eye(3)  # no rotation
         geom.dataid = -1
